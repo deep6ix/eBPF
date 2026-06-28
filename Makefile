@@ -1,20 +1,15 @@
 ARCH := $(shell uname -m | sed 's/x86_64/x86/;s/aarch64/arm64/')
+CLANG := clang
+VMLINUX_DIR := bpf
+INCLUDES := -I$(VMLINUX_DIR)
 
-all: exec
+CFLAGS := -g -O2 -Wall -Wno-missing-declarations
+BPF_CFLAGS := -target bpf -D__TARGET_ARCH_$(ARCH)
 
-vmlinux.h:
-	bpftool btf dump file /sys/kernel/btf/vmlinux format c > $@
-
-# kernel half -> BPF object. -g is REQUIRED (embeds BTF for CO-RE); -O2 REQUIRED.
-# -D__TARGET_ARCH_x86 isn't used by this program but you'll need it for kprobes later.
-exec.bpf.o: exec.bpf.c vmlinux.h
-	clang -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) -I. -c exec.bpf.c -o exec.bpf.o
-
-# userspace half -> ordinary binary, linked against libbpf (+ libelf + zlib, its deps)
-exec: exec.c exec.bpf.o
-	clang -g -O2 -Wall exec.c -lbpf -lelf -lz -o exec
+exec.bpf.o: bpf/exec.bpf.c
+	$(CLANG) $(CFLAGS) $(BPF_CFLAGS) $(INCLUDES) -c $< -o $@
 
 clean:
-	rm -f exec exec.bpf.o
+	rm -f exec.bpf.o exec-tracer
 
-.PHONY: all clean
+.PHONY: clean
